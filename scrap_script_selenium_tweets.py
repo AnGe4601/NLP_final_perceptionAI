@@ -21,22 +21,18 @@ translator = Translator()
 COOKIE = "cookies.json"
 SCROLL_PAUSE = r.randint(10,15)
 MAX_SCROLLS = 100
-TARGET_COUNT = 1000
-SAVE_INTERVAL = 50
+TARGET_COUNT = 4000
+SAVE_INTERVAL = 100
 START_DATE = "2023-04-01"
 END_DATE = "2026-04-01"
-LANG = "en"
 
-QUERIES = {
-    "en": ["generative AI", "ChatGPT", "artificial intelligence", "machine learning", "Claude"],
-    "fr": ["intelligence artificielle", "ChatGPT", "apprentissage automatique", "IA générative"],
-    "zh": ["人工智能", "ChatGPT", "机器学习", "生成式AI", "大语言模型"],
-    "es": ["inteligencia artificial", "ChatGPT", "aprendizaje automático", "IA generativa"]
-}
+# Change target language for scraping
+lang = "en"
 
 # Reading from pre-defined csv file contained all keywords
-# keyword_list = pd.read_csv("search_keywords_list.csv")
-# QUERIES = keyword_list.to_dict("list")
+keyword_list = pd.read_csv("search_keywords_list.csv")
+keyword_list.rename(columns={"en": "en", "fr": "fr", "es": "es", "zh": "zh"})
+QUERIES = [k.strip('') for k in keyword_list[lang].dropna().tolist()]
 
 
 # File Helpers
@@ -241,7 +237,6 @@ def scrap_per_timerange(driver, lang, keyword, week_start, week_end, seen):
                         detected_lang = "en"
                     elif detected_lang == "es":
                         detected_lang = "es"
-                    
 
                     tweet = save_tweets(tweet_id, lang, detected_lang, keyword, display_name, handle, date, tweet_text)
 
@@ -295,74 +290,71 @@ def scrape_tweets():
     driver.get("https://x.com/home")
     time.sleep(5)
     
-    for lang, keywords in QUERIES.items():
-        print(f"\n{'='*50}\nStarting language: {lang}\n{'='*50}")
+    #for lang, keywords in QUERIES.items():
+    print(f"\n{'='*50}\nStarting language: {lang}\n{'='*50}")
 
-        # Load existing tweets for this language
-        pfile = partial_file(lang)
-        if os.path.exists(pfile) and os.path.getsize(pfile) > 0:
-            df_existing = pd.read_csv(pfile)
-            all_tweets  = df_existing.to_dict("records")
-            seen = {t["tweet_id"] for t in all_tweets if "tweet_id" in t}
-            print(f"[Resume] {len(all_tweets)} tweets already collected for {lang}")
-        else:
-            all_tweets = []
-            seen = set()
+    # Load existing tweets for this language
+    pfile = partial_file(lang)
+    if os.path.exists(pfile) and os.path.getsize(pfile) > 0:
+        df_existing = pd.read_csv(pfile)
+        all_tweets  = df_existing.to_dict("records")
+        seen = {t["tweet_id"] for t in all_tweets if "tweet_id" in t}
+        print(f"[Resume] {len(all_tweets)} tweets already collected for {lang}")
+    else:
+        all_tweets = []
+        seen = set()
 
+    # Load checkpoint to know where we left off
+    checkpoint   = load_checkpoint(lang)
+    start_kw     = checkpoint["keyword"]   if checkpoint else None
+    start_week   = checkpoint["week_start"] if checkpoint else None
+    reached_start = (checkpoint is None)  # if no checkpoint, start from beginning
+        
+    # print(f"[DEBUG] lang: {lang}")
+    # print(f"[DEBUG] keywords: {keywords}")
+    # print(f"[DEBUG] all_tweets count: {len(all_tweets)}")
+    # print(f"[DEBUG] TARGET_COUNT: {TARGET_COUNT}")
+    # print(f"[DEBUG] checkpoint: {checkpoint}")
+    # print(f"[DEBUG] reached_start: {reached_start}")
+
+
+    for keyword in QUERIES:
         if len(all_tweets) >= TARGET_COUNT:
             print(f"[Done] Already have {len(all_tweets)} tweets for {lang}. Skipping.")
-            continue
-
-        # Load checkpoint to know where we left off
-        checkpoint   = load_checkpoint(lang)
-        start_kw     = checkpoint["keyword"]   if checkpoint else None
-        start_week   = checkpoint["week_start"] if checkpoint else None
-        reached_start = (checkpoint is None)  # if no checkpoint, start from beginning
+            break
         
-        print(f"[DEBUG] lang: {lang}")
-        print(f"[DEBUG] keywords: {keywords}")
-        print(f"[DEBUG] all_tweets count: {len(all_tweets)}")
-        print(f"[DEBUG] TARGET_COUNT: {TARGET_COUNT}")
-        print(f"[DEBUG] checkpoint: {checkpoint}")
-        print(f"[DEBUG] reached_start: {reached_start}")
-
-
-        for keyword in keywords:
+        # Skip keywords before the checkpointed one
+        if not reached_start and keyword != start_kw:
+            print(f"[Skip keyword] '{keyword}'")
+            continue
+            
+        for week_start, week_end in generate_timerange(START_DATE, END_DATE):
             if len(all_tweets) >= TARGET_COUNT:
                 break
 
-            # Skip keywords before the checkpointed one
-            if not reached_start and keyword != start_kw:
-                print(f"[Skip keyword] '{keyword}'")
+            # Skip months before the checkpointed month
+            if not reached_start and week_start < start_week:
+                print(f"[Skip month] {week_start}")
                 continue
-            
-            for week_start, week_end in generate_timerange(START_DATE, END_DATE):
-                if len(all_tweets) >= TARGET_COUNT:
-                    break
-
-                # Skip months before the checkpointed month
-                if not reached_start and week_start < start_week:
-                    print(f"[Skip month] {week_start}")
-                    continue
                 
-                reached_start = True  # ← set it once we're past the skipping phase
+            reached_start = True  # ← set it once we're past the skipping phase
 
-                print(f"[Scraping] {lang} | '{keyword}' | {week_start} → {week_end}")
-                print(f"[DEBUG] About to call scrap_per_timerange for {lang} | '{keyword}' | {week_start} → {week_end}")
+            print(f"[Scraping] {lang} | '{keyword}' | {week_start} → {week_end}")
+            print(f"[DEBUG] About to call scrap_per_timerange for {lang} | '{keyword}' | {week_start} → {week_end}")
 
-                new_tweets = scrap_per_timerange(driver, lang, keyword, week_start, week_end, seen)
-                print(f"[DEBUG] scrap_per_timerange returned: {new_tweets}")
-                if new_tweets:
-                    all_tweets.extend(new_tweets)
+            new_tweets = scrap_per_timerange(driver, lang, keyword, week_start, week_end, seen)
+            print(f"[DEBUG] scrap_per_timerange returned: {new_tweets}")
+            if new_tweets:
+                all_tweets.extend(new_tweets)
 
-                save_scraped_data(all_tweets, pfile)
-                save_checkpoint(lang, keyword, week_start)
-                time.sleep(5)
+            save_scraped_data(all_tweets, pfile)
+            save_checkpoint(lang, keyword, week_start)
+            time.sleep(5)
 
-        # Save final file for this language
-        if all_tweets:
-            save_scraped_data(all_tweets, final_file(lang))
-            print(f"[Final] {lang}: {len(all_tweets)} tweets saved to {final_file(lang)}")
+    # Save final file for this language
+    if all_tweets:
+        save_scraped_data(all_tweets, final_file(lang))
+        print(f"[Final] {lang}: {len(all_tweets)} tweets saved to {final_file(lang)}")
 
     driver.quit()
     print("\nDone Scraping")
