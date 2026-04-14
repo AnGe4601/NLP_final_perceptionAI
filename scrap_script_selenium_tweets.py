@@ -5,6 +5,7 @@ import random as r
 import pandas as pd
 from urllib.parse import quote
 from datetime import datetime, timedelta
+from googletrans import Translator
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -14,6 +15,8 @@ from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.chrome.options import Options
 from selenium_stealth import stealth
 
+translator = Translator()
+
 # Configureation - Adjust as needed
 COOKIE = "cookies.json"
 SCROLL_PAUSE = r.randint(10,15)
@@ -22,13 +25,19 @@ TARGET_COUNT = 1000
 SAVE_INTERVAL = 50
 START_DATE = "2023-04-01"
 END_DATE = "2026-04-01"
+LANG = "en"
 
 QUERIES = {
-    "en": ["generative AI", "ChatGPT", "artificial intelligence", "machine learning", "generative AI"],
+    "en": ["generative AI", "ChatGPT", "artificial intelligence", "machine learning", "Claude"],
     "fr": ["intelligence artificielle", "ChatGPT", "apprentissage automatique", "IA générative"],
     "zh": ["人工智能", "ChatGPT", "机器学习", "生成式AI", "大语言模型"],
     "es": ["inteligencia artificial", "ChatGPT", "aprendizaje automático", "IA generativa"]
 }
+
+# Reading from pre-defined csv file contained all keywords
+# keyword_list = pd.read_csv("search_keywords_list.csv")
+# QUERIES = keyword_list.to_dict("list")
+
 
 # File Helpers
 def partial_file(lang):
@@ -110,6 +119,21 @@ def save_scraped_data(tweets, filename):
     df_final.to_csv(filename, index=False)
     print(f"[Saved] {len(df_final)} tweets as {filename}")
 
+def save_tweets(tweet_id, search_lang, detected_lang, keyword, display_name, handle, date, text):
+    """
+    Helper 
+    """
+    return {
+        "tweet_id":      tweet_id,
+        "search_lang":   search_lang,    
+        "detected_lang": detected_lang,  
+        "keyword":       keyword,
+        "display_name":  display_name,
+        "handle":        handle,
+        "date":          date,
+        "text":          text
+    }
+
 def generate_timerange (start, end):
     """
     Generate and define timerange of data scrapping
@@ -147,87 +171,97 @@ def scrap_per_timerange(driver, lang, keyword, week_start, week_end, seen):
 
     new_tweets = []
     scrolls = 0
+    try:
+        while scrolls < MAX_SCROLLS:
+            scrolls += 1
+            soft_block_count = 0
 
-    while scrolls < MAX_SCROLLS:
-        scrolls += 1
-        soft_block_count = 0
-
-        # Soft block detection
-        if "Something went wrong" in driver.page_source:
-            if soft_block_count <= 3:
-                print(f"[Soft block] {lang} | '{keyword}' | {week_start}. Waiting 60s...")
-                time.sleep(60)
-                driver.refresh()
-                time.sleep(5)
-                continue
-            else:
-                save_checkpoint
-
-        try:
-            # Wait until some contents are being loaded
-            WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.XPATH, "//article"))
-            )
-        except TimeoutException:
-            print(f"[Timeout] No tweets loaded for {week_start}.")
-            break
-
-        elements = driver.find_elements(By.XPATH, "//article")
-        if not elements:
-            print("No tweets found. Moving on.")
-            break
-
-        new_this_scroll = 0
-        for el in elements:
-            try:
-                link_el  = el.find_element(By.XPATH, ".//a[contains(@href,'/status/')]")
-                tweet_id = link_el.get_attribute("href").split("/")[-1]
-
-                if tweet_id in seen:
+            # Soft block detection
+            if "Something went wrong" in driver.page_source:
+                if soft_block_count <= 3:
+                    print(f"[Soft block] {lang} | '{keyword}' | {week_start}. Waiting 60s...")
+                    time.sleep(60)
+                    driver.refresh()
+                    time.sleep(5)
                     continue
+                else:
+                    save_checkpoint(lang, keyword, week_start)
+
+            try:
+                # Wait until some contents are being loaded
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.XPATH, "//article"))
+                )
+            except TimeoutException:
+                print(f"[Timeout] No tweets loaded for {week_start}.")
+                break
+
+            elements = driver.find_elements(By.XPATH, "//article")
+            if not elements:
+                print("No tweets found. Moving on.")
+                break
+
+            new_this_scroll = 0
+            for el in elements:
                 try:
-                    display_name = el.find_element(
-                        By.XPATH, ".//div[@data-testid='User-Name']//span"
-                    ).text
+                    link_el  = el.find_element(By.XPATH, ".//a[contains(@href,'/status/')]")
+                    tweet_id = link_el.get_attribute("href").split("/")[-1]
+
+                    if tweet_id in seen:
+                        continue
+                    try:
+                        display_name = el.find_element(
+                            By.XPATH, ".//div[@data-testid='User-Name']//span"
+                        ).text
+                    except Exception as e:
+                        display_name = None
+
+                    try:
+                        handle = link_el.get_attribute("href").split("/")[3]
+                    except Exception as e:
+                        handle = None
+
+                    date_el    = el.find_element(By.TAG_NAME, "time")
+                    date       = date_el.get_attribute("datetime")
+                    text_block = el.find_elements(By.XPATH, ".//div[@data-testid='tweetText']")
+                    tweet_text = " ".join([t.text for t in text_block])
+
+                    # Langage detection filter
+                    try:
+                        detected = translator.detect(tweet_text)
+                        detected_lang = detected.lang
+                    except:
+                        detected_lang = "unknown"
+
+                    if detected_lang in ["zh-cn", "zh-tw"]:
+                        detected_lang = "zh"
+                    elif detected_lang == "fr":
+                        detected_lang = "fr"
+                    elif detected_lang == "en":
+                        detected_lang = "en"
+                    elif detected_lang == "es":
+                        detected_lang = "es"
+                    
+
+                    tweet = save_tweets(tweet_id, lang, detected_lang, keyword, display_name, handle, date, tweet_text)
+
+                    new_tweets.append(tweet)
+                    seen.add(tweet_id)
+                    new_this_scroll += 1
+
                 except Exception as e:
-                    display_name = None
+                    print(f"Skipping tweet: {e}")
+                    continue
 
-                try:
-                    handle = link_el.get_attribute("href").split("/")[3]
-                except Exception as e:
-                    handle = None
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(SCROLL_PAUSE)
 
-                date_el    = el.find_element(By.TAG_NAME, "time")
-                date       = date_el.get_attribute("datetime")
-                text_block = el.find_elements(By.XPATH, ".//div[@data-testid='tweetText']")
-                tweet_text = " ".join([t.text for t in text_block])
-
-                # Baseline tweet structure
-                tweet = {
-                    "tweet_id":     tweet_id,
-                    "lang":         lang,
-                    "keyword":      keyword,
-                    "display_name": display_name,
-                    "handle":       handle,
-                    "date":         date,
-                    "text":         tweet_text
-                }
-
-                new_tweets.append(tweet)
-                seen.add(tweet_id)
-                new_this_scroll += 1
-
-            except Exception as e:
-                print(f"Skipping tweet: {e}")
-                continue
-
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        time.sleep(SCROLL_PAUSE)
-
-        if new_this_scroll == 0:
-            print("No new tweets this scroll. Moving to next week.")
-            break
-    
+            if new_this_scroll == 0:
+                print("No new tweets this scroll. Moving to next week.")
+                break
+    except KeyboardInterrupt:
+        print("\n[Interrupted] Saving partial progress...")
+        return new_tweets  # return whatever was collected so far
     return new_tweets
     
 def scrape_tweets():
