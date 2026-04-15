@@ -1,28 +1,28 @@
-en,fr,es,ch
-"""Agentic AI"" or ""AI agents""",,,
-"""Autonomous vehicles""",,,
-"""AI"" or ""Artificial Intelligence""",,,
-"""Generative AI""",,,
-"""Chatbot""",,,
-"""AI Assistant""",,,
-"""AI Image""",,,
-"""AI Summary""",,,
-"""Responsible AI""",,,
-"""Data center""",,,
-"""Deepfake""",,,
-"""AI Ethics""",,,
-"""AI Governance""",,,
-"""AI Regulation""",,,
-"""Algorithmic Bias""",,,
-"""Large Language Model"" or ""LLM"" or ""LLMs""",,,
-"""Machine Learning"" or ""ML""",,,
-"""Deep Learning""",,,
-"""Human-in-the-loop""",,,
-"""Text generation""",,,
-"""Virtual assistant""",,,
-"""Algorithm""",,,
-"""Computer Vision""",,,
-"""Apple Intelligence""",,,
+en,fr,es,zh
+"""Agentic AI"" or ""AI agents""","""agent IA"" or ""agents IA""","""IA agéntica"" or ""agentes de IA""",“代理式人工智能” or “人工智能代理”
+"""Autonomous vehicles""","""véhicules autonomes""","""Vehículos autónomos""",“自动驾驶”
+"""AI"" or ""Artificial Intelligence""","""IA"" ou ""intelligence artificielle""","""IA"" or ""Inteligencia artificial""",“AI” or “人工智能”
+"""Generative AI""","""IA génératif""","""IA generativa""",“生成式人工智能”
+"""Chatbot""","""Chatbot""","""Chatbot""",“聊天机器人”
+"""AI Assistant""","""Assistent IA""","""Asistente de IA""",“AI 助手” or “人工智能助手”
+"""AI Image""","""Image générée par IA""","""Imagen generada por IA""",“AI图像” or “人工生成图像”
+"""AI Summary""","""résumé générée par IA""","""Resumen generado por IA""",“AI摘要”
+"""Responsible AI""","""IA responsable""","""IA responsable""","""负责任的人工智能"""
+"""Data center""","""centre de données""","""Centro de datos""",“数据中心”
+"""Deepfake""","""Deepfake""","""Deepfake""","""AI深度伪造"""
+"""AI Ethics""","""Éthique de l'IA""","""Ética de la IA""",“人工智能伦理”
+"""AI Governance""","""Gouvernance de l'IA""","""Gobernanza de la IA""","“人工智能治理” or ""AI智能治理”"
+"""AI Regulation""","""Regulation de l'IA""","""Regulación de la IA""","“人工智能监管” or ""AI智能监管"""
+"""Algorithmic Bias""","""Biais algorithmique""","""Sesgo algorítmico""",“算法偏见” or “算法偏见”
+"""Large Language Model"" or ""LLM"" or ""LLMs""","""Grand modèle de langage"" ou ""LLM"" ou ""LLMs""","""Modelo de lenguaje grande"" o ""LLM"" o ""LLMs""",“大型语言模型” 
+"""Machine Learning"" or ""ML""","""Apprentissage machine"" ou ""ML""","""Aprendizaje automático"" o ""ML""",“机器学习”
+"""Deep Learning""","""Apprentissage profonde""","""Aprendizaje profundo""",“深度学习”
+"""Human-in-the-loop""","""Intervention humaine""","""Intervencion humana""",“人机协同”
+"""Text generation""","""génération de texte""","""Generación de texto""",“文本生成”
+"""Virtual assistant""","""Assistant virtuel""","""Asistente virtual""",“虚拟助手” or “虚拟助手”
+"""Algorithm""","""Algorithme""","""Algoritmo""",“算法”
+"""Computer Vision""","""Vision artificielle""","""Visión artificial""","“计算机视觉” or ""电脑视觉"""
+"""Apple Intelligence""","""L'intelligence d'Apple""","""Inteligencia Apple""",“苹果智能”
 """Anthropic""",,,
 """ChatGPT""",,,
 """Character AI""",,,
@@ -34,5 +34,5 @@ en,fr,es,ch
 """Meta AI"" or ""LLaMA""",,,
 """OpenAI""",,,
 """Grok""",,,
-"""DeepSeek""",,,深度求索
+"""DeepSeek""",,,"""深度求索"""
 """Stable Diffusion""",,,

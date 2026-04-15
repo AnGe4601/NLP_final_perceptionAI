@@ -2,6 +2,7 @@ import os
 import json
 import time
 import random as r
+import numpy as np
 import pandas as pd
 from urllib.parse import quote
 from datetime import datetime, timedelta
@@ -14,26 +15,38 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.chrome.options import Options
 from selenium_stealth import stealth
+import asyncio
 
 translator = Translator()
 
 # Configureation - Adjust as needed
 COOKIE = "cookies.json"
-SCROLL_PAUSE = r.randint(10,15)
+SCROLL_PAUSE = 3
 MAX_SCROLLS = 100
 TARGET_COUNT = 4000
 SAVE_INTERVAL = 100
 START_DATE = "2023-04-01"
 END_DATE = "2026-04-01"
+TARGET_PER_KEYWORD = 100
 
 # Change target language for scraping
-lang = "en"
+lang = "zh"
 
 # Reading from pre-defined csv file contained all keywords
 keyword_list = pd.read_csv("search_keywords_list.csv")
 keyword_list.rename(columns={"en": "en", "fr": "fr", "es": "es", "zh": "zh"})
-QUERIES = [k.strip('') for k in keyword_list[lang].dropna().tolist()]
+QUERIES = [k.strip('"') for k in keyword_list[lang].dropna().tolist()]
 
+def random_date_window(start, end, window_days=14):
+    """Pick a random start date and return a 2 week window"""
+    start_dt = pd.to_datetime(start)
+    end_dt   = pd.to_datetime(end) - pd.Timedelta(days=window_days)
+    
+    # Random date between start and end minus window
+    random_start = start_dt + pd.Timedelta(days=np.random.randint(0, (end_dt - start_dt).days))
+    random_end   = random_start + pd.Timedelta(days=window_days)
+    
+    return random_start.strftime("%Y-%m-%d"), random_end.strftime("%Y-%m-%d")
 
 # File Helpers
 def partial_file(lang):
@@ -134,6 +147,9 @@ def generate_timerange (start, end):
     """
     Generate and define timerange of data scrapping
     """
+    # Generates randome time range for scraping
+    time_range = (random_datetimes(START_DATE, END_DATE))
+    
     current = datetime.strptime(start, "%Y-%m-%d")
     end_dt  = datetime.strptime(end,   "%Y-%m-%d")
 
@@ -146,7 +162,7 @@ def generate_timerange (start, end):
         yield current.strftime("%Y-%m-%d"), month_end.strftime("%Y-%m-%d")
         current = month_end
 
-def scrap_per_timerange(driver, lang, keyword, week_start, week_end, seen):
+async def scrap_per_timerange(driver, lang, keyword, week_start, week_end, seen):
     """
     Scrap data at interval with pre-defined time range
     """
@@ -167,11 +183,10 @@ def scrap_per_timerange(driver, lang, keyword, week_start, week_end, seen):
 
     new_tweets = []
     scrolls = 0
+    soft_block_count = 0
     try:
         while scrolls < MAX_SCROLLS:
             scrolls += 1
-            soft_block_count = 0
-
             # Soft block detection
             if "Something went wrong" in driver.page_source:
                 if soft_block_count <= 3:
@@ -222,9 +237,9 @@ def scrap_per_timerange(driver, lang, keyword, week_start, week_end, seen):
                     text_block = el.find_elements(By.XPATH, ".//div[@data-testid='tweetText']")
                     tweet_text = " ".join([t.text for t in text_block])
 
-                    # Langage detection filter
+                    # Language detection filter - FIXED WITH AWAIT
                     try:
-                        detected = translator.detect(tweet_text)
+                        detected = await asyncio.to_thread(translator.detect, tweet_text)
                         detected_lang = detected.lang
                     except:
                         detected_lang = "unknown"
@@ -249,7 +264,7 @@ def scrap_per_timerange(driver, lang, keyword, week_start, week_end, seen):
                     continue
 
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(SCROLL_PAUSE)
+            time.sleep(r.randint(10, 15))
 
             if new_this_scroll == 0:
                 print("No new tweets this scroll. Moving to next week.")
@@ -259,7 +274,7 @@ def scrap_per_timerange(driver, lang, keyword, week_start, week_end, seen):
         return new_tweets  # return whatever was collected so far
     return new_tweets
     
-def scrape_tweets():
+async def scrape_tweets():
     """
     Scrap Twitter data using Chrome Stealth Mode. Will save results to csv
     """
@@ -305,51 +320,34 @@ def scrape_tweets():
         seen = set()
 
     # Load checkpoint to know where we left off
-    checkpoint   = load_checkpoint(lang)
-    start_kw     = checkpoint["keyword"]   if checkpoint else None
-    start_week   = checkpoint["week_start"] if checkpoint else None
-    reached_start = (checkpoint is None)  # if no checkpoint, start from beginning
-        
-    # print(f"[DEBUG] lang: {lang}")
-    # print(f"[DEBUG] keywords: {keywords}")
-    # print(f"[DEBUG] all_tweets count: {len(all_tweets)}")
-    # print(f"[DEBUG] TARGET_COUNT: {TARGET_COUNT}")
-    # print(f"[DEBUG] checkpoint: {checkpoint}")
-    # print(f"[DEBUG] reached_start: {reached_start}")
-
+    checkpoint  = load_checkpoint(lang)
+    start_kw    = checkpoint["keyword"] if checkpoint else None
+    reached_start = (checkpoint is None)
 
     for keyword in QUERIES:
         if len(all_tweets) >= TARGET_COUNT:
-            print(f"[Done] Already have {len(all_tweets)} tweets for {lang}. Skipping.")
             break
-        
-        # Skip keywords before the checkpointed one
+        # Skip keywords before checkpoint
+
         if not reached_start and keyword != start_kw:
             print(f"[Skip keyword] '{keyword}'")
             continue
-            
-        for week_start, week_end in generate_timerange(START_DATE, END_DATE):
-            if len(all_tweets) >= TARGET_COUNT:
-                break
+        reached_start = True
 
-            # Skip months before the checkpointed month
-            if not reached_start and week_start < start_week:
-                print(f"[Skip month] {week_start}")
-                continue
-                
-            reached_start = True  # ← set it once we're past the skipping phase
+        keyword_tweets = []
+        week_start, week_end = random_date_window(START_DATE, END_DATE)
+        print(f"[Scraping] {lang} | '{keyword}' | {week_start} → {week_end}")
 
-            print(f"[Scraping] {lang} | '{keyword}' | {week_start} → {week_end}")
-            print(f"[DEBUG] About to call scrap_per_timerange for {lang} | '{keyword}' | {week_start} → {week_end}")
+        # FIXED: Added await
+        new_tweets = await scrap_per_timerange(driver, lang, keyword, week_start, week_end, seen)
+        if new_tweets:
+            # Only take up to 100 per keyword
+            keyword_tweets = new_tweets[:TARGET_PER_KEYWORD]
+            all_tweets.extend(keyword_tweets)
 
-            new_tweets = scrap_per_timerange(driver, lang, keyword, week_start, week_end, seen)
-            print(f"[DEBUG] scrap_per_timerange returned: {new_tweets}")
-            if new_tweets:
-                all_tweets.extend(new_tweets)
-
-            save_scraped_data(all_tweets, pfile)
-            save_checkpoint(lang, keyword, week_start)
-            time.sleep(5)
+        save_scraped_data(all_tweets, pfile)
+        save_checkpoint(lang, keyword, week_start)
+        time.sleep(5)
 
     # Save final file for this language
     if all_tweets:
@@ -360,4 +358,4 @@ def scrape_tweets():
     print("\nDone Scraping")
 
 if __name__ == "__main__":
-    scrape_tweets()
+    asyncio.run(scrape_tweets())
